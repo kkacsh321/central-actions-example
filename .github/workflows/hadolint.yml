@@ -1,4 +1,4 @@
-# Workflow Version: 1.0.3
+# Workflow Version: 1.0.0
 name: Hadolint Check
 
 on:

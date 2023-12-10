@@ -1,4 +1,4 @@
-# Workflow Version: 1.0.1
+# Workflow Version: 1.0.0
 name: Auto Increment and Release
 
 on:
@@ -19,5 +19,5 @@ jobs:
 
     uses: ./.github/workflows/wf_auto_increment.yml
     with:
-      runner: central-actions-runner
+      runner: central-actions-example-runner
     secrets: inherit
