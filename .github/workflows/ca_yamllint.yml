@@ -1,0 +1,13 @@
+# Workflow Version: 1.0.2
+name: Yamllint Check
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, edited, synchronize]
+
+jobs:
+  yamllint-check:
+    uses: ./.github/workflows/yamllint.yml
+    with:
+      runner: central-actions-runner
+    secrets: inherit

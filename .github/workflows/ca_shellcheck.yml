@@ -1,0 +1,13 @@
+# Workflow Version: 1.0.2
+name: Shellcheck
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, edited, synchronize]
+
+jobs:
+  shellcheck-check:
+    uses: ./.github/workflows/shellcheck.yml
+    with:
+      runner: central-actions-runner
+    secrets: inherit

@@ -1,0 +1,13 @@
+# Workflow Version: 1.0.6
+name: Action Lint Check
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, edited, synchronize]
+
+jobs:
+  actionlint-check:
+    uses: ./.github/workflows/actionlint.yml
+    with:
+      runner: central-actions-runner
+    secrets: inherit

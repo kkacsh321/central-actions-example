@@ -1,0 +1,53 @@
+# Workflow Version: 1.0.3
+name: Hadolint Check
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        required: true
+        type: string
+        description: Path to dockerfile
+      runner:
+        required: true
+        type: string
+        description: Runner to use
+
+jobs:
+  hadolint-check:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: hadolint/hadolint-action@v3.1.0
+        id: hadolint
+        with:
+          dockerfile: ${{ inputs.dockerfile }}
+
+      - name: Update Pull Request
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const hadolintOutcome = "${{ steps.hadolint.outcome }}";
+            const hadolintResults = process.env.HADOLINT_RESULTS;
+            let output = '';
+
+            if (hadolintOutcome === 'success') {
+              output = "#### Your Hadolint results are nice and clean";
+            } else {
+              output = `
+                #### Hadolint Results
+                \`\`\`
+                ${hadolintResults}
+                \`\`\`
+              `;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });

@@ -1,0 +1,207 @@
+# Workflow Version: 1.1.6
+name: Auto Increment Workflow
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+        description: Runner to use
+
+jobs:
+  increment-workflow:
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GIT_TOKEN }}
+
+      - name: Setup Token
+        run: |
+          git config --global url."https://oauth2:${{ secrets.GIT_TOKEN }}@github.com".insteadOf https://github.com
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh
+
+      - name: Setup Workflows to Update
+        id: setup_workflow
+        run: |
+          set -e 
+
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B | head -n 3 | tail -n 1)
+
+          echo "COMMIT_MESSAGE=${COMMIT_MESSAGE}" >> "${GITHUB_ENV}"
+
+          # Get a newline-separated list of changed .yml files
+          WORKFLOWS=$(git diff --name-only HEAD^..HEAD | grep '.github/workflows/.*\.yml$')
+
+          # Convert the list into a space-separated string and set it as an environment variable
+          WORKFLOWS="${WORKFLOWS//$'\n'/ }"
+          echo "WORKFLOWS=${WORKFLOWS}" >> "${GITHUB_ENV}"
+
+          # Determine version increment type
+          if [[ "${COMMIT_MESSAGE}" == *"#major"* ]]; then
+            echo "Major version increase requested"
+            VERSION_INCREMENT="major"
+          elif [[ "${COMMIT_MESSAGE}" == *"#minor"* ]]; then
+            echo "Minor version increase requested"
+            VERSION_INCREMENT="minor"
+          else
+            echo "Patch version increase detected"
+            VERSION_INCREMENT="patch"
+          fi
+
+          echo "VERSION_INCREMENT=${VERSION_INCREMENT}" >> "${GITHUB_ENV}"
+
+          echo "Commit Messages = ${COMMIT_MESSAGE}"
+          echo "Workflows = ${WORKFLOWS}"
+          echo "Version Increment = ${VERSION_INCREMENT}"
+
+      - name: Version Incrementor
+        id: version_incrementor
+        run: |
+          set -e
+
+          echo "Commit Messages = ${COMMIT_MESSAGE}"
+          echo "Workflows = ${WORKFLOWS}"
+          echo "Version Increment = ${VERSION_INCREMENT}"
+
+          # Process each changed .yml file
+          for file in ${WORKFLOWS}; do
+            # Skip the excluded file
+            if [[ "${file}" == ".github/workflows/exclude-this-file.yml" ]]; then
+              echo "Skipping excluded file: ${file}"
+              continue
+            fi
+
+            echo "Processing $file"
+
+            # Extract current version in PR branch
+            CURRENT_VERSION=$(grep -oP '# Workflow Version: \K.*' "$file" || echo "")
+
+            # Compare versions and update if necessary
+            if [[ -n "${CURRENT_VERSION}" ]]; then
+              # Check if the file contains the version comment
+              if ! grep -q '# Workflow Version:' "$file"; then
+                echo "Version comment not found in ${file}, skipping..."
+                continue
+              fi
+
+              # Extract current version
+              IFS='.' read -r major minor patch <<< "${CURRENT_VERSION}"
+
+              # Increment version based on the commit message
+              case ${VERSION_INCREMENT} in
+                major)
+                  (( major+=1 ))
+                  minor=0
+                  patch=0
+                  ;;
+                minor)
+                  (( minor+=1 ))
+                  patch=0
+                  ;;
+                patch)
+                  (( patch+=1 ))
+                  ;;
+              esac
+              NEW_VERSION="$major.$minor.$patch"
+
+              echo "New Version is ${NEW_VERSION}"
+              # Update version in the first line of the file
+              sed -i "1s/# Workflow Version: .*/# Workflow Version: ${NEW_VERSION}/" "${file}"
+
+              # Extract the base filename without the .yml extension for the tag
+              BASE_FILENAME=$(basename "${file}" .yml)
+
+              VERSION_NAME=${BASE_FILENAME}-v${NEW_VERSION}
+
+              echo "Version Name is ${VERSION_NAME}"
+
+              # Append the version to the list of created versions
+              VERSIONS_CREATED="${VERSIONS_CREATED}${VERSION_NAME} "
+              
+              # Commit changes
+              git status
+              git add .
+              git commit -m "[skip ci] Update version for ${BASE_FILENAME} to ${NEW_VERSION}" || echo "No changes to commit for ${BASE_FILENAME}"
+            else
+              echo "Version in $file is already up to date."
+            fi
+          done
+
+          # Remove trailing space and export the tags created
+          VERSIONS_CREATED_LIST=$(echo "${VERSIONS_CREATED}" | xargs)
+          echo "Versions Created = ${VERSIONS_CREATED_LIST}"
+          echo "VERSIONS_CREATED=${VERSIONS_CREATED_LIST}" >> "${GITHUB_ENV}"
+
+      - name: Push version updates
+        id: push
+        if: env.VERSIONS_CREATED != ''
+        run: |
+          set -e
+          git status
+          git push origin main || (echo "Failed to push changes to main branch" && exit 1)
+
+      - name: Create Tags
+        id: create_tags
+        if: steps.push.outcome == 'success'
+        run: |
+          set -e
+
+          # Double-quote the variable to prevent globbing and word splitting
+          echo "Version(s) to turn into Tags = ${VERSIONS_CREATED}"
+
+          # Loop over each version, ensuring it is quoted to prevent word splitting
+          for version in ${VERSIONS_CREATED}; do
+            echo "${version}"
+            # Create the tag
+            if ! git tag -a "${version}" -m "Update ${version}"; then
+              echo "Failed to create tag for ${version}, skipping..."
+            else
+              # Push the tag if creation was successful
+              echo "Pushing tag: ${version}"
+              if ! git push origin "${version}"; then
+                echo "Failed to push tag for ${version}"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Create Release from tag
+        id: create_tag
+        if: steps.create_tags.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          # Create Release
+
+          RETRY_COUNT=0
+          MAX_RETRIES=5
+          SLEEP_SECONDS=10
+
+          for tag in ${VERSIONS_CREATED}; do
+            until gh release create "${tag}" \
+                  --title "${tag} release" \
+                  --generate-notes \
+                  --verify-tag; do
+              RETRY_COUNT=$((RETRY_COUNT+1))
+              if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
+                echo "Failed to create release for ${tag} after ${MAX_RETRIES} attempts, exiting..."
+                exit 1
+              fi
+              echo "Attempt ${RETRY_COUNT} failed, retrying in ${SLEEP_SECONDS} seconds..."
+              sleep "${SLEEP_SECONDS}"
+            done
+          done

@@ -1,0 +1,81 @@
+version: "3"
+
+vars:
+  OVERRIDE_WORKFLOWS_CMD: "git show --oneline ${SHA1} | head -1 | grep \"#workflows\" | sed -E 's/^.*#workflows(.*)#workflows.*/\\1/g'"
+  ALL_WORKFLOWS_CMD: "find ./.github/workflows -name 'package.json' | sort | xargs -I {} dirname {} | xargs -I {} basename {} | tr '\n' ' '"
+  WORKFLOWS_CMD: "git log --no-merges --name-status HEAD^..HEAD | grep \"workflows/\" | grep -Fv 'README.md' | awk -F\"/\" '/workflows\\/\\// {print $$3}' | sort -u"
+  GIT_TAG_CMD: "git describe --tags $(git rev-list --tags --max-count=1) | sed s/v//g"
+  RUNNER_OVERRIDE: "central-actions-runner=catthehacker/ubuntu:act-latest"
+
+tasks:
+  default:
+    desc: "Display available tasks"
+    cmds:
+      - task --list
+
+  workflow:
+    desc: "Display what workflows will be ran"
+    cmds:
+      - echo {{.WORKFLOW}}
+
+  list-workflows:
+    desc: "Run workflow locally"
+    cmds:
+      - echo "Listing available workflows with Act.."
+      - act -l
+
+  run-workflow:
+    desc: "Run workflow locally 'WORKFLOW=<workflow_name> task run-workflow'"
+    cmds:
+      - echo "Running {{.WORKFLOW}} Workflow with Act.."
+      - act --secret-file .envrc -j {{.WORKFLOW}} -P {{.RUNNER_OVERRIDE}}
+
+  actionlint:
+    desc: "Run actionlint"
+    cmds:
+      - echo "Running actionlint"
+      - actionlint -config-file ./.github/actionlint.yml
+
+  markdownlint:
+    desc: "Run markdownlint"
+    cmds:
+      - echo "Running markdownlint"
+      - markdownlint-cli2 "**/*.md"
+
+  shellcheck:
+    desc: "Run shellcheck"
+    cmds:
+      - echo "Running shellcheck"
+      - shellcheck scripts/setup.sh
+
+  yamllint:
+    desc: "Run yamllint"
+    cmds:
+      - echo "Running yamllint"
+      - yamllint -c .linters/yaml-linter.yml .
+
+  override-workflows:
+    desc: "Display what actions will be ran"
+    cmds:
+      - echo $OVERRIDE_WORKFLOWS
+
+  all-workflows:
+    desc: "Generates a list of all actions"
+    cmds:
+      - echo $ALL_WORKFLOWS
+
+  new-workflow:
+    desc: "Generate a new run-workflow"
+    cmds:
+      - |
+        echo "Creating new workflow from template"
+        read -p "Enter New Workflow Name: " new_workflow_name
+        echo "New workflow name is: $new_workflow_name"
+        # You can now use $new_workflow_name in further commands
+        cp template/template_workflow.yml \
+        .github/workflows/$new_workflow_name.yml
+        sed -i '' "s/template/$new_workflow_name/g" \
+        .github/workflows/$new_workflow_name.yml
+        echo "Created .github/workflows/$new_workflow_name.yml for
+        your new workflow"
+        echo "Enjoy your day"

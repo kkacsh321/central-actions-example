@@ -1,0 +1,21 @@
+# Workflow Version: 1.0.0
+---
+name: template
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+        description: Runner to use
+
+jobs:
+  template:
+    name: template
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0

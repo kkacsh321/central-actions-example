@@ -1,0 +1,31 @@
+# Workflow Version: 1.0.2
+---
+name: MarkdownLint
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+        description: Runner to use
+
+jobs:
+  markdownlint:
+    name: markdownlint
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GIT_TOKEN }}
+
+      - name: markdownlint
+        uses: reviewdog/action-markdownlint@v0
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.REVIEWDOG_TOKEN }}
+        with:
+          github_token: ${{ secrets.GIT_TOKEN }}
+          reporter: github-pr-review
+          fail_on_error: "true"

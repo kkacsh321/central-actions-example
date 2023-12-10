@@ -1,0 +1,13 @@
+# Workflow Version: 1.0.1
+name: Markdownlint Check
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, edited, synchronize]
+
+jobs:
+  markdownlint-check:
+    uses: ./.github/workflows/markdownlint.yml
+    with:
+      runner: central-actions-runner
+    secrets: inherit

@@ -1,0 +1,23 @@
+# Workflow Version: 1.0.1
+name: Auto Increment and Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/*.yml"
+
+jobs:
+  auto-increment-release:
+    permissions:
+      id-token: write
+      actions: write
+      checks: read
+      contents: read
+      pull-requests: write
+
+    uses: ./.github/workflows/wf_auto_increment.yml
+    with:
+      runner: central-actions-runner
+    secrets: inherit

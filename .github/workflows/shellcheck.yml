@@ -1,0 +1,33 @@
+# Workflow Version: 1.0.1
+---
+name: Shellcheck
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+        description: Runner to use
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GIT_TOKEN }}
+
+      - name: shellcheck
+        uses: reviewdog/action-shellcheck@v1
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.REVIEWDOG_TOKEN }}
+        with:
+          github_token: ${{ secrets.GIT_TOKEN }}
+          reporter: github-pr-review
+          fail_on_error: "true"
+          path: "scripts"
+          pattern: "*.sh"

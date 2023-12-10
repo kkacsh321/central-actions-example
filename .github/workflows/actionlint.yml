@@ -1,0 +1,27 @@
+# Workflow Version: 1.0.7
+name: Actionlint
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+        description: Runner to use
+
+jobs:
+  actionlint:
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@v1
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.REVIEWDOG_TOKEN }}
+        with:
+          github_token: ${{ secrets.GIT_TOKEN }}
+          reporter: github-pr-review
+          fail_on_error: true
