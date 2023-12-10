@@ -1,4 +1,4 @@
-# Workflow Version: 1.0.0
+# Workflow Version: 1.0.1
 name: Auto Increment and Release
 
 on:
